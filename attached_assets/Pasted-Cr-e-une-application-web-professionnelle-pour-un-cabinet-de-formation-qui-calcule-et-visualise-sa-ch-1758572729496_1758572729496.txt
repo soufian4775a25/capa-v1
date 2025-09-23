@@ -1,0 +1,62 @@
+Crée une application web professionnelle pour un cabinet de formation qui calcule et visualise sa charge-capacité en fonction des contraintes suivantes :
+Objectif principal
+•	Aider le cabinet à évaluer sa capacité réelle à lancer de nouvelles formations.
+•	Donner une vue synthétique de l’occupation des ressources (formateurs, salles, ateliers).
+•	Permettre une prise de décision rapide et éclairée.
+Fonctionnalités attendues
+1.	Gestion des formateurs
+o	Fiche formateur : nom, spécialité, modules qu’il peut enseigner, volume horaire maximum disponible.
+o	Suivi de l’affectation par module.
+o	Alerte si un formateur dépasse son quota horaire.
+o	Prise en considération des absences planifiées (congé…)
+2.	Groupe de formation
+o	Date de démarrage et fin de formation des groupes selon les modules affectés
+o	Date de fin ou date de démarrage possible en prendre en compte les différentes contraintes en cas de démarrage forcé,
+o	Planification automatique selon type de formation (mémorisée dans la plateforme, pas besoin à chaque fois de re- saisir),
+o	Mentionner des retards (si besoin) et prendre en considération les retards pour avoir une visibilité sur le déroulement à la date de fin de formation estimative,
+
+3.	Gestion des modules et programmes
+o	Création de modules : nom, durée totale en heures, nombre de séances par semaine.
+o	Association des modules aux formateurs disponibles.
+o	Prise en compte du nombre de groupes à former (ex. : 3 groupes de 20 personnes).
+o	Ordre de chronologique d’animation des modules,
+o	Pratique ou théorique
+4.	Gestion des salles et ateliers
+o	Base de données des salles : capacité en personnes, disponibilité.
+o	Base de données des ateliers pratiques : équipements, disponibilité.
+o	Vérification automatique si les ressources physiques suffisent pour le nombre de groupes.
+o	Affectation automatique de la salle au groupe
+5.	Calcul de la charge-capa
+o	Calcul automatique de la charge de travail par formateur.
+o	Calcul d’occupation des salles/ateliers.
+o	Synthèse globale : taux d’occupation (%), capacité restante, surcharge éventuelle.
+        
+6.	Tableaux de bord et synthèse
+o	Tableau de bord avec indicateurs clés :
+	% occupation des formateurs
+	% occupation des salles
+	nombre de groupes pris en charge vs nombre de groupes demandés
+o	Visualisation graphique (barres, jauges, camembert).
+o	Rapport automatique proposant :
+	“OK, lancement possible” si ressources suffisantes
+	ou “Attention, surcharge” si manque de ressources
+7.	Expérience utilisateur
+o	Interface simple, claire et ergonomique.
+o	Menu de navigation : Formateurs, Modules, Salles/Ateliers, Synthèse.
+o	Possibilité d’exporter les résultats (Excel/PDF).
+Aspects techniques
+•	Interface moderne et responsive (mobile + PC), avec des couleurs modernes et ergonomiques
+•	Base de données interne pour stocker les informations localement,
+•	Moteur de calcul qui croise automatiquement les données (formateurs, modules, salles, groupes et les différentes contraintes).
+•	Authentification (admin seul utilisateur avec mot de passe chargecapa@2025).
+Cas d’usage typique
+1.	L’admin saisit la liste des formateurs avec leurs disponibilités.
+2.	L’admin ajoute les modules et définit le nombre de groupes à former.
+3.	Le système affecte les formateurs aux modules, vérifie la dispo des salles/ateliers.
+4.	Le tableau de bord indique :
+o	charge de chaque formateur
+o	occupation des salles
+o	capacité restante ou insuffisance
+o	suivi d’avancement des groupes de formation
+5.	Le cabinet décide s’il peut ouvrir de nouvelles formations ou pas quand et comment car la plateforme peut proposer des scénarios en combinaison toutes les contraintes
+
