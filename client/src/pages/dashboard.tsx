@@ -43,6 +43,10 @@ export default function Dashboard() {
     enabled: isAuthenticated,
   });
 
+  const { data: schedules } = useQuery({
+    queryKey: ["/api/group-module-schedules"],
+    enabled: isAuthenticated,
+  });
   if (!isAuthenticated) {
     return null;
   }
@@ -251,6 +255,13 @@ export default function Dashboard() {
                           <p className="text-sm text-amber-600" data-testid="text-overload-details">
                             Certains formateurs dépassent leur quota
                           </p>
+              
+              {summary?.trainerWorkload?.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground">
+                  <p>Aucune charge de travail calculée</p>
+                  <p className="text-xs">Les affectations seront créées automatiquement lors de la création de groupes</p>
+                </div>
+              )}
                         </div>
                       </div>
                     </div>
@@ -339,7 +350,9 @@ export default function Dashboard() {
                           {group.participantCount}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap" data-testid={`text-group-room-${index}`}>
-                          {group.roomId ? "Salle assignée" : "Non assigné"}
+                          {group.roomId ? "Salle assignée" : (
+                            <Badge variant="outline" className="text-amber-600">Non assigné</Badge>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm" data-testid={`text-group-start-${index}`}>
                           {new Date(group.startDate).toLocaleDateString('fr-FR')}
@@ -349,6 +362,11 @@ export default function Dashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap" data-testid={`status-group-${index}`}>
                           {getStatusBadge(group.status)}
+                          {schedules?.filter(s => s.groupId === group.id).length > 0 && (
+                            <Badge variant="outline" className="ml-2 text-green-600">
+                              {schedules.filter(s => s.groupId === group.id).length} modules
+                            </Badge>
+                          )}
                         </td>
                       </tr>
                     ))}

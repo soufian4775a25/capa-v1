@@ -58,6 +58,15 @@ export default function Reports() {
     enabled: isAuthenticated,
   });
 
+  const { data: capacityAnalysis } = useQuery({
+    queryKey: ["/api/capacity/analysis"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: schedules } = useQuery({
+    queryKey: ["/api/group-module-schedules"],
+    enabled: isAuthenticated,
+  });
   const handleExport = async (format: 'excel' | 'pdf', reportType: string) => {
     if (!summary) return;
     
@@ -69,6 +78,8 @@ export default function Reports() {
         groups,
         modules,
         rooms,
+        capacityAnalysis,
+        schedules,
         reportType,
         period: selectedPeriod,
         generatedAt: new Date().toISOString(),
@@ -378,10 +389,72 @@ export default function Reports() {
                   </p>
                   <p className="text-sm text-muted-foreground">Salles</p>
                 </div>
+                
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-amber-600" data-testid="text-preview-assignments">
+                    {schedules?.length || 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Affectations</p>
+                </div>
+                
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600" data-testid="text-preview-conflicts">
+                    {capacityAnalysis?.trainerConstraints?.filter(tc => tc.isOverloaded).length || 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Conflits</p>
+                </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* Detailed Analysis */}
+          {capacityAnalysis && (
+            <Card>
+              <CardHeader>
+                <CardTitle data-testid="text-analysis-title">Analyse Détaillée</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Group Assignments */}
+                  <div>
+                    <h4 className="font-medium mb-3">Affectations par Groupe</h4>
+                    <div className="space-y-2">
+                      {capacityAnalysis.groupAssignments?.slice(0, 5).map((assignment, index) => (
+                        <div key={assignment.groupId} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                          <div>
+                            <p className="font-medium text-sm">{assignment.groupName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {assignment.assignedModules} modules, {assignment.assignedTrainers} formateurs
+                            </p>
+                          </div>
+                          <div className="flex space-x-1">
+                            {assignment.hasRoom ? (
+                              <Badge className="bg-green-100 text-green-800 text-xs">Salle OK</Badge>
+                            ) : (
+                              <Badge className="bg-red-100 text-red-800 text-xs">Sans salle</Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div>
+                    <h4 className="font-medium mb-3">Recommandations Système</h4>
+                    <div className="space-y-2">
+                      {capacityAnalysis.recommendations?.map((recommendation, index) => (
+                        <div key={index} className="flex items-start space-x-2 p-2 bg-blue-50 rounded">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full mt-1.5"></div>
+                          <p className="text-sm">{recommendation}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Export History */}
           <Card>
             <CardHeader>

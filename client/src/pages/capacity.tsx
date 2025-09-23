@@ -40,6 +40,15 @@ export default function Capacity() {
     enabled: isAuthenticated,
   });
 
+  const { data: capacityAnalysis } = useQuery({
+    queryKey: ["/api/capacity/analysis"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: schedules } = useQuery({
+    queryKey: ["/api/group-module-schedules"],
+    enabled: isAuthenticated,
+  });
   if (!isAuthenticated) {
     return null;
   }
@@ -281,6 +290,90 @@ export default function Capacity() {
             </Card>
           </div>
 
+          {/* Capacity Analysis */}
+          {capacityAnalysis && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Trainer Constraints */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Users className="h-5 w-5" />
+                    <span>Contraintes Formateurs</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {capacityAnalysis.trainerConstraints?.slice(0, 5).map((constraint, index) => (
+                      <div key={constraint.trainerId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div>
+                          <p className="font-medium">{constraint.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {constraint.availableHours}h disponibles
+                          </p>
+                        </div>
+                        <Badge 
+                          className={constraint.isOverloaded ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                        >
+                          {constraint.isOverloaded ? "Surcharge" : "OK"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Room Constraints */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Calendar className="h-5 w-5" />
+                    <span>Contraintes Salles</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {capacityAnalysis.roomConstraints?.slice(0, 5).map((constraint, index) => (
+                      <div key={constraint.roomId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div>
+                          <p className="font-medium">{constraint.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {constraint.type === 'workshop' ? 'Atelier' : 'Salle'} - {constraint.availableCapacity}h libres
+                          </p>
+                        </div>
+                        <Badge 
+                          className={constraint.isOverbooked ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                        >
+                          {constraint.isOverbooked ? "Surbookée" : "OK"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Recommendations */}
+          {capacityAnalysis?.recommendations && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  <span>Recommandations</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {capacityAnalysis.recommendations.map((recommendation, index) => (
+                    <div key={index} className="flex items-start space-x-2 p-3 rounded-lg bg-blue-50">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                      <p className="text-sm">{recommendation}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Monthly Analysis Indicators */}
           <Card className="mb-6">
             <CardHeader>

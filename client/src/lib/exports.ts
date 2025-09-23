@@ -31,6 +31,8 @@ export interface ExportData {
   reportType?: string;
   period?: string;
   generatedAt?: string;
+  capacityAnalysis?: any;
+  schedules?: any[];
 }
 
 export async function exportToExcel(data: ExportData): Promise<void> {
@@ -102,6 +104,27 @@ function generateCSVContent(data: ExportData): string {
   lines.push(`Total Salles,${data.totalRooms || 0}`);
   lines.push('');
   
+  // Capacity Analysis
+  if (data.capacityAnalysis) {
+    lines.push('ANALYSE DE CAPACITÉ');
+    lines.push('Type,Nom,Statut,Détails');
+    
+    data.capacityAnalysis.trainerConstraints?.forEach(tc => {
+      lines.push(`Formateur,${tc.name},${tc.isOverloaded ? 'Surcharge' : 'OK'},${tc.availableHours}h disponibles`);
+    });
+    
+    data.capacityAnalysis.roomConstraints?.forEach(rc => {
+      lines.push(`Salle,${rc.name},${rc.isOverbooked ? 'Surbookée' : 'OK'},${rc.availableCapacity}h libres`);
+    });
+    lines.push('');
+    
+    lines.push('RECOMMANDATIONS');
+    data.capacityAnalysis.recommendations?.forEach(rec => {
+      lines.push(`- ${rec}`);
+    });
+    lines.push('');
+  }
+  
   // Trainer workload
   if (data.trainerWorkload && data.trainerWorkload.length > 0) {
     lines.push('CHARGE DE TRAVAIL FORMATEURS');
@@ -118,6 +141,19 @@ function generateCSVContent(data: ExportData): string {
     lines.push('Salle,Heures Occupées,Heures Disponibles,Taux Occupation');
     data.roomOccupancy.forEach(room => {
       lines.push(`${room.name},${room.occupiedHours},${room.availableHours},${room.occupationRate}%`);
+    });
+    lines.push('');
+  }
+  
+  // Schedules
+  if (data.schedules && data.schedules.length > 0) {
+    lines.push('PLANIFICATION MODULES');
+    lines.push('Groupe,Module,Formateur,Ordre,Statut,Progression');
+    data.schedules.forEach(schedule => {
+      const groupName = data.groups?.find(g => g.id === schedule.groupId)?.name || 'Inconnu';
+      const moduleName = data.modules?.find(m => m.id === schedule.moduleId)?.name || 'Inconnu';
+      const trainerName = data.trainers?.find(t => t.id === schedule.trainerId)?.name || 'Inconnu';
+      lines.push(`${groupName},${moduleName},${trainerName},${schedule.scheduledOrder},${schedule.status},${schedule.progress}%`);
     });
     lines.push('');
   }
@@ -279,6 +315,63 @@ function generateHTMLContent(data: ExportData): string {
             `).join('')}
           </tbody>
         </table>
+      </div>
+      ` : ''}
+      
+      ${data.capacityAnalysis ? `
+      <div class="section">
+        <h2>Analyse de Capacité</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h3>Contraintes Formateurs</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Formateur</th>
+                  <th>Statut</th>
+                  <th>Heures Disponibles</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.capacityAnalysis.trainerConstraints?.map(tc => `
+                  <tr>
+                    <td>${tc.name}</td>
+                    <td style="color: ${tc.isOverloaded ? '#dc2626' : '#16a34a'}">${tc.isOverloaded ? 'Surcharge' : 'OK'}</td>
+                    <td>${tc.availableHours}h</td>
+                  </tr>
+                `).join('') || ''}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Contraintes Salles</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Salle</th>
+                  <th>Type</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.capacityAnalysis.roomConstraints?.map(rc => `
+                  <tr>
+                    <td>${rc.name}</td>
+                    <td>${rc.type === 'workshop' ? 'Atelier' : 'Salle'}</td>
+                    <td style="color: ${rc.isOverbooked ? '#dc2626' : '#16a34a'}">${rc.isOverbooked ? 'Surbookée' : 'OK'}</td>
+                  </tr>
+                `).join('') || ''}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h3>Recommandations</h3>
+          <ul>
+            ${data.capacityAnalysis.recommendations?.map(rec => `<li>${rec}</li>`).join('') || ''}
+          </ul>
+        </div>
       </div>
       ` : ''}
       

@@ -248,6 +248,10 @@ export class MemStorage implements IStorage {
       createdAt: new Date()
     };
     this.trainingGroups.set(id, group);
+    
+    // Auto-assign modules and trainers to the group
+    await this.autoAssignModulesAndTrainers(id);
+    
     return group;
   }
 
@@ -328,27 +332,109 @@ export class MemStorage implements IStorage {
     return this.groupModuleSchedules.delete(id);
   }
 
+  // Auto-assignment logic
+  private async autoAssignModulesAndTrainers(groupId: string): Promise<void> {
+    const group = this.trainingGroups.get(groupId);
+    if (!group) return;
+
+    const activeModules = Array.from(this.modules.values()).filter(m => m.isActive);
+    const activeTrainers = Array.from(this.trainers.values()).filter(t => t.isActive);
+    const assignments = Array.from(this.moduleTrainerAssignments.values());
+
+    // Create schedules for each module
+    for (let i = 0; i < activeModules.length; i++) {
+      const module = activeModules[i];
+      
+      // Find a trainer who can teach this module
+      const availableTrainers = activeTrainers.filter(trainer => {
+        const assignment = assignments.find(a => a.moduleId === module.id && a.trainerId === trainer.id);
+        return assignment?.canTeach || trainer.specialties?.some(spec => 
+          module.name.toLowerCase().includes(spec.toLowerCase()) ||
+          spec.toLowerCase().includes(module.name.toLowerCase())
+        );
+      });
+
+      // Select trainer with lowest current workload
+      const selectedTrainer = availableTrainers.reduce((best, current) => {
+        if (!best) return current;
+        return current.currentHoursPerWeek < best.currentHoursPerWeek ? current : best;
+      }, null as Trainer | null);
+
+      if (selectedTrainer) {
+        // Create group module schedule
+        const scheduleId = randomUUID();
+        const schedule: GroupModuleSchedule = {
+          id: scheduleId,
+          groupId: groupId,
+          moduleId: module.id,
+          trainerId: selectedTrainer.id,
+          scheduledOrder: i + 1,
+          startDate: null,
+          endDate: null,
+          progress: 0,
+          hoursCompleted: "0",
+          status: "planned"
+        };
+        this.groupModuleSchedules.set(scheduleId, schedule);
+
+        // Update trainer workload
+        const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
+        selectedTrainer.currentHoursPerWeek += weeklyHours;
+        this.trainers.set(selectedTrainer.id, selectedTrainer);
+
+        // Create module-trainer assignment if it doesn't exist
+        const existingAssignment = assignments.find(a => 
+          a.moduleId === module.id && a.trainerId === selectedTrainer.id
+        );
+        if (!existingAssignment) {
+          const assignmentId = randomUUID();
+          const assignment: ModuleTrainerAssignment = {
+            id: assignmentId,
+            moduleId: module.id,
+            trainerId: selectedTrainer.id,
+            canTeach: true
+          };
+          this.moduleTrainerAssignments.set(assignmentId, assignment);
+        }
+      }
+    }
+  }
+
+  // Update trainer workload when schedules change
+  private async updateTrainerWorkload(): Promise<void> {
+    // Reset all trainer workloads
+    for (const trainer of this.trainers.values()) {
+      trainer.currentHoursPerWeek = 0;
+    }
+
+    // Recalculate based on active schedules
+    const activeSchedules = Array.from(this.groupModuleSchedules.values())
+      .filter(s => s.status === 'active' || s.status === 'planned');
+
+    for (const schedule of activeSchedules) {
+      const trainer = this.trainers.get(schedule.trainerId);
+      const module = this.modules.get(schedule.moduleId);
+      
+      if (trainer && module) {
+        const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
+        trainer.currentHoursPerWeek += weeklyHours;
+        this.trainers.set(trainer.id, trainer);
+      }
+    }
+  }
+
   // Capacity calculations
   async calculateTrainerWorkload(): Promise<Array<{trainerId: string, name: string, currentHours: number, maxHours: number, occupationRate: number}>> {
+    await this.updateTrainerWorkload();
     const trainers = await this.getAllTrainers();
-    const schedules = await this.getGroupModuleSchedules();
     
     return trainers.map(trainer => {
-      const trainerSchedules = schedules.filter(s => s.trainerId === trainer.id && s.status === 'active');
-      const currentHours = trainerSchedules.reduce((total, schedule) => {
-        const module = this.modules.get(schedule.moduleId);
-        if (module) {
-          return total + (Number(module.hoursPerSession) * module.sessionsPerWeek);
-        }
-        return total;
-      }, 0);
-
-      const occupationRate = trainer.maxHoursPerWeek > 0 ? (currentHours / trainer.maxHoursPerWeek) * 100 : 0;
+      const occupationRate = trainer.maxHoursPerWeek > 0 ? (trainer.currentHoursPerWeek / trainer.maxHoursPerWeek) * 100 : 0;
 
       return {
         trainerId: trainer.id,
         name: trainer.name,
-        currentHours,
+        currentHours: trainer.currentHoursPerWeek,
         maxHours: trainer.maxHoursPerWeek,
         occupationRate: Math.round(occupationRate)
       };
@@ -363,9 +449,9 @@ export class MemStorage implements IStorage {
     const workingHoursPerWeek = 40; // Assumption: 40 hours per week availability
 
     return rooms.map(room => {
-      const roomGroups = groups.filter(g => g.roomId === room.id && g.status === 'active');
+      const roomGroups = groups.filter(g => g.roomId === room.id && (g.status === 'active' || g.status === 'planned'));
       const occupiedHours = roomGroups.reduce((total, group) => {
-        const groupSchedules = schedules.filter(s => s.groupId === group.id && s.status === 'active');
+        const groupSchedules = schedules.filter(s => s.groupId === group.id && (s.status === 'active' || s.status === 'planned'));
         return total + groupSchedules.reduce((scheduleTotal, schedule) => {
           const module = this.modules.get(schedule.moduleId);
           if (module) {
@@ -385,6 +471,81 @@ export class MemStorage implements IStorage {
         occupationRate: Math.round(occupationRate)
       };
     });
+  }
+
+  // Get detailed capacity analysis
+  async getCapacityAnalysis(): Promise<{
+    trainerConstraints: Array<{trainerId: string, name: string, isOverloaded: boolean, availableHours: number}>;
+    roomConstraints: Array<{roomId: string, name: string, type: string, isOverbooked: boolean, availableCapacity: number}>;
+    groupAssignments: Array<{groupId: string, groupName: string, assignedModules: number, assignedTrainers: number, hasRoom: boolean}>;
+    recommendations: string[];
+  }> {
+    const trainerWorkload = await this.calculateTrainerWorkload();
+    const roomOccupancy = await this.calculateRoomOccupancy();
+    const groups = await this.getAllTrainingGroups();
+    const schedules = await this.getGroupModuleSchedules();
+
+    const trainerConstraints = trainerWorkload.map(tw => ({
+      trainerId: tw.trainerId,
+      name: tw.name,
+      isOverloaded: tw.occupationRate > 100,
+      availableHours: Math.max(0, tw.maxHours - tw.currentHours)
+    }));
+
+    const roomConstraints = roomOccupancy.map(ro => ({
+      roomId: ro.roomId,
+      name: ro.name,
+      type: this.rooms.get(ro.roomId)?.type || 'unknown',
+      isOverbooked: ro.occupationRate > 100,
+      availableCapacity: Math.max(0, ro.availableHours - ro.occupiedHours)
+    }));
+
+    const groupAssignments = groups.map(group => {
+      const groupSchedules = schedules.filter(s => s.groupId === group.id);
+      const uniqueTrainers = new Set(groupSchedules.map(s => s.trainerId));
+      
+      return {
+        groupId: group.id,
+        groupName: group.name,
+        assignedModules: groupSchedules.length,
+        assignedTrainers: uniqueTrainers.size,
+        hasRoom: !!group.roomId
+      };
+    });
+
+    const recommendations: string[] = [];
+    
+    // Generate recommendations
+    const overloadedTrainers = trainerConstraints.filter(tc => tc.isOverloaded);
+    if (overloadedTrainers.length > 0) {
+      recommendations.push(`${overloadedTrainers.length} formateur(s) en surcharge - redistribuer les modules`);
+    }
+
+    const overbookedRooms = roomConstraints.filter(rc => rc.isOverbooked);
+    if (overbookedRooms.length > 0) {
+      recommendations.push(`${overbookedRooms.length} salle(s) surbookée(s) - revoir la planification`);
+    }
+
+    const unassignedGroups = groupAssignments.filter(ga => ga.assignedModules === 0);
+    if (unassignedGroups.length > 0) {
+      recommendations.push(`${unassignedGroups.length} groupe(s) sans modules assignés`);
+    }
+
+    const groupsWithoutRooms = groupAssignments.filter(ga => !ga.hasRoom);
+    if (groupsWithoutRooms.length > 0) {
+      recommendations.push(`${groupsWithoutRooms.length} groupe(s) sans salle assignée`);
+    }
+
+    if (recommendations.length === 0) {
+      recommendations.push("Capacité optimale - possibilité de lancer de nouveaux groupes");
+    }
+
+    return {
+      trainerConstraints,
+      roomConstraints,
+      groupAssignments,
+      recommendations
+    };
   }
 }
 
