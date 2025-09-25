@@ -5,14 +5,30 @@ import { useQuery } from "@tanstack/react-query";
 import Sidebar from "@/components/layout/sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, AlertTriangle, CheckCircle, Clock, Users, BarChart3 } from "lucide-react";
-import type { TrainingGroup, Room, Module, Trainer } from "@shared/schema";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Calendar, 
+  AlertTriangle, 
+  CheckCircle, 
+  Clock, 
+  Users, 
+  BarChart3,
+  Building,
+  BookOpen,
+  TrendingUp,
+  Download
+} from "lucide-react";
+import { exportToPDF, exportToExcel } from "@/lib/exports";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Capacity() {
   const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedView, setSelectedView] = useState("monthly");
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -20,173 +36,71 @@ export default function Capacity() {
     }
   }, [isAuthenticated, setLocation]);
 
-  const { data: groups } = useQuery<TrainingGroup[]>({
-    queryKey: ["/api/training-groups"],
-    enabled: isAuthenticated,
-  });
-
-  const { data: rooms } = useQuery<Room[]>({
-    queryKey: ["/api/rooms"],
-    enabled: isAuthenticated,
-  });
-
-  const { data: modules } = useQuery<Module[]>({
-    queryKey: ["/api/modules"],
-    enabled: isAuthenticated,
-  });
-
-  const { data: trainers } = useQuery<Trainer[]>({
-    queryKey: ["/api/trainers"],
-    enabled: isAuthenticated,
-  });
-
-  const { data: capacityAnalysis } = useQuery({
+  const { data: capacityAnalysis, isLoading } = useQuery({
     queryKey: ["/api/capacity/analysis"],
     enabled: isAuthenticated,
   });
 
-  const { data: schedules } = useQuery({
-    queryKey: ["/api/group-module-schedules"],
+  const { data: summary } = useQuery({
+    queryKey: ["/api/dashboard/summary"],
     enabled: isAuthenticated,
   });
+
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    if (!capacityAnalysis || !summary) return;
+    
+    try {
+      const reportData = {
+        ...summary,
+        capacityAnalysis,
+        reportType: 'detailed-capacity',
+        period: `${selectedYear}`,
+        generatedAt: new Date().toISOString(),
+      };
+
+      if (format === 'excel') {
+        await exportToExcel(reportData);
+        toast({
+          title: "Export réussi",
+          description: "Le rapport Excel a été généré avec succès",
+        });
+      } else {
+        await exportToPDF(reportData);
+        toast({
+          title: "Export réussi", 
+          description: "Le rapport PDF a été généré avec succès",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Erreur d'export",
+        description: "Impossible de générer le rapport",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (!isAuthenticated) {
     return null;
   }
 
-  // Generate months for the selected year and next year
+  if (isLoading) {
+    return (
+      <div className="flex h-screen">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          <div className="p-6">
+            <div className="text-center">Chargement de l'analyse de capacité...</div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   const months = [
-    'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun',
-    'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
-
-  const yearRange = [selectedYear, selectedYear + 1];
-
-  // Calculate room constraints for each month
-  const calculateRoomConstraints = (month: number, year: number) => {
-    if (!groups || !rooms) return { classroom: 0, workshop: 0 };
-    
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    
-    let classroomCount = 0;
-    let workshopCount = 0;
-    
-    groups.forEach(group => {
-      const groupStart = new Date(group.startDate);
-      const groupEnd = group.endDate ? new Date(group.endDate) : 
-                      group.estimatedEndDate ? new Date(group.estimatedEndDate) : 
-                      new Date(groupStart.getTime() + 90 * 24 * 60 * 60 * 1000); // Default 90 days
-      
-      // Check if group overlaps with this month
-      if (groupStart <= monthEnd && groupEnd >= monthStart && group.roomId) {
-        const room = rooms.find(r => r.id === group.roomId);
-        if (room) {
-          if (room.type === 'classroom') {
-            classroomCount++;
-          } else if (room.type === 'workshop') {
-            workshopCount++;
-          }
-        }
-      }
-    });
-    
-    return { classroom: classroomCount, workshop: workshopCount };
-  };
-
-  // Calculate trainer constraints for each month
-  const calculateTrainerConstraints = (month: number, year: number) => {
-    if (!groups || !trainers) return { required: 0, available: 0 };
-    
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    
-    let requiredTrainers = 0;
-    
-    groups.forEach(group => {
-      const groupStart = new Date(group.startDate);
-      const groupEnd = group.endDate ? new Date(group.endDate) : 
-                      group.estimatedEndDate ? new Date(group.estimatedEndDate) : 
-                      new Date(groupStart.getTime() + 90 * 24 * 60 * 60 * 1000);
-      
-      // Check if group overlaps with this month
-      if (groupStart <= monthEnd && groupEnd >= monthStart && group.status !== 'completed') {
-        requiredTrainers++;
-      }
-    });
-    
-    const availableTrainers = trainers.filter(t => t.isActive).length;
-    
-    return { required: requiredTrainers, available: availableTrainers };
-  };
-
-  // Calculate monthly indicators
-  const calculateMonthlyIndicators = (month: number, year: number) => {
-    if (!groups || !rooms || !trainers) return { participants: 0, occupationRate: 0, conflicts: 0 };
-    
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    
-    let totalParticipants = 0;
-    let activeGroups = 0;
-    let conflicts = 0;
-    
-    groups.forEach(group => {
-      const groupStart = new Date(group.startDate);
-      const groupEnd = group.endDate ? new Date(group.endDate) : 
-                      group.estimatedEndDate ? new Date(group.estimatedEndDate) : 
-                      new Date(groupStart.getTime() + 90 * 24 * 60 * 60 * 1000);
-      
-      if (groupStart <= monthEnd && groupEnd >= monthStart && group.status !== 'completed') {
-        totalParticipants += group.participantCount;
-        activeGroups++;
-      }
-    });
-    
-    const roomConstraints = calculateRoomConstraints(month, year);
-    const trainerConstraints = calculateTrainerConstraints(month, year);
-    
-    if (hasConflict(roomConstraints)) conflicts++;
-    if (trainerConstraints.required > trainerConstraints.available) conflicts++;
-    
-    const maxCapacity = rooms.filter(r => r.isActive).reduce((sum, room) => sum + room.capacity, 0);
-    const occupationRate = maxCapacity > 0 ? Math.round((totalParticipants / maxCapacity) * 100) : 0;
-    
-    return { participants: totalParticipants, occupationRate, conflicts, activeGroups };
-  };
-
-  // Check if there's a conflict (more groups than available rooms)
-  const hasConflict = (constraints: { classroom: number; workshop: number }) => {
-    const availableClassrooms = rooms?.filter(r => r.type === 'classroom' && r.isActive).length || 0;
-    const availableWorkshops = rooms?.filter(r => r.type === 'workshop' && r.isActive).length || 0;
-    
-    return constraints.classroom > availableClassrooms || constraints.workshop > availableWorkshops;
-  };
-
-  // Check trainer conflicts
-  const hasTrainerConflict = (trainerConstraints: { required: number; available: number }) => {
-    return trainerConstraints.required > trainerConstraints.available;
-  };
-
-  // Get group timeline for a specific month
-  const getGroupTimeline = (group: TrainingGroup, month: number, year: number) => {
-    const monthStart = new Date(year, month, 1);
-    const monthEnd = new Date(year, month + 1, 0);
-    const groupStart = new Date(group.startDate);
-    const groupEnd = group.endDate ? new Date(group.endDate) : 
-                    group.estimatedEndDate ? new Date(group.estimatedEndDate) : 
-                    new Date(groupStart.getTime() + 90 * 24 * 60 * 60 * 1000);
-    
-    // Check if group overlaps with this month
-    if (groupStart <= monthEnd && groupEnd >= monthStart) {
-      const isStart = groupStart.getMonth() === month && groupStart.getFullYear() === year;
-      const isEnd = groupEnd.getMonth() === month && groupEnd.getFullYear() === year;
-      const isActive = groupStart <= monthEnd && groupEnd >= monthStart;
-      
-      return { isActive, isStart, isEnd };
-    }
-    
-    return { isActive: false, isStart: false, isEnd: false };
-  };
 
   return (
     <div className="flex h-screen">
@@ -197,10 +111,10 @@ export default function Capacity() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold" data-testid="text-page-title">
-                Charge Capacité
+                Calcul Charge-Capacité
               </h2>
               <p className="text-muted-foreground" data-testid="text-page-subtitle">
-                Visualisation de la charge et disponibilité des ressources
+                Analyse détaillée de la charge par semaine et mois
               </p>
             </div>
             <div className="flex items-center space-x-4">
@@ -212,8 +126,8 @@ export default function Capacity() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 5 }, (_, i) => {
-                    const year = new Date().getFullYear() + i - 1;
+                  {Array.from({ length: 3 }, (_, i) => {
+                    const year = new Date().getFullYear() + i;
                     return (
                       <SelectItem key={year} value={year.toString()}>
                         {year}
@@ -222,20 +136,37 @@ export default function Capacity() {
                   })}
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                onClick={() => handleExport('excel')}
+                data-testid="button-export-excel"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Excel
+              </Button>
+              <Button
+                onClick={() => handleExport('pdf')}
+                data-testid="button-export-pdf"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
             </div>
           </div>
         </header>
 
         <div className="p-6">
-          {/* Capacity Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
                   <Users className="h-5 w-5 text-blue-600" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Groupes Actifs</p>
-                    <p className="text-2xl font-bold">{groups?.filter(g => g.status === 'active').length || 0}</p>
+                    <p className="text-sm text-muted-foreground">Formateurs Actifs</p>
+                    <p className="text-2xl font-bold" data-testid="text-active-trainers">
+                      {capacityAnalysis?.trainerConstraints?.length || 0}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -244,10 +175,12 @@ export default function Capacity() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-green-600" />
+                  <Building className="h-5 w-5 text-green-600" />
                   <div>
                     <p className="text-sm text-muted-foreground">Salles Disponibles</p>
-                    <p className="text-2xl font-bold">{rooms?.filter(r => r.type === 'classroom' && r.isActive).length || 0}</p>
+                    <p className="text-2xl font-bold" data-testid="text-available-rooms">
+                      {capacityAnalysis?.roomConstraints?.length || 0}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -256,22 +189,12 @@ export default function Capacity() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-purple-600" />
-                  <div>
-                    <p className="text-sm text-muted-foreground">Ateliers Disponibles</p>
-                    <p className="text-2xl font-bold">{rooms?.filter(r => r.type === 'workshop' && r.isActive).length || 0}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-5 w-5 text-amber-600" />
+                  <BookOpen className="h-5 w-5 text-purple-600" />
                   <div>
                     <p className="text-sm text-muted-foreground">Groupes Planifiés</p>
-                    <p className="text-2xl font-bold">{groups?.filter(g => g.status === 'planned').length || 0}</p>
+                    <p className="text-2xl font-bold" data-testid="text-planned-groups">
+                      {capacityAnalysis?.groupAssignments?.length || 0}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -280,281 +203,463 @@ export default function Capacity() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center space-x-2">
-                  <Users className="h-5 w-5 text-indigo-600" />
+                  <TrendingUp className="h-5 w-5 text-amber-600" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Formateurs Actifs</p>
-                    <p className="text-2xl font-bold">{trainers?.filter(t => t.isActive).length || 0}</p>
+                    <p className="text-sm text-muted-foreground">Semaines Planifiées</p>
+                    <p className="text-2xl font-bold" data-testid="text-planned-weeks">
+                      {capacityAnalysis?.weeklyPlanning?.length || 0}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className={`h-5 w-5 ${
+                    (capacityAnalysis?.trainerConstraints?.some(tc => tc.isOverloaded) || 
+                     capacityAnalysis?.roomConstraints?.some(rc => rc.isOverbooked)) 
+                    ? 'text-red-600' : 'text-green-600'
+                  }`} />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Conflits</p>
+                    <p className={`text-2xl font-bold ${
+                      (capacityAnalysis?.trainerConstraints?.some(tc => tc.isOverloaded) || 
+                       capacityAnalysis?.roomConstraints?.some(rc => rc.isOverbooked)) 
+                      ? 'text-red-600' : 'text-green-600'
+                    }`} data-testid="text-conflicts-count">
+                      {(capacityAnalysis?.trainerConstraints?.filter(tc => tc.isOverloaded).length || 0) +
+                       (capacityAnalysis?.roomConstraints?.filter(rc => rc.isOverbooked).length || 0)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Capacity Analysis */}
-          {capacityAnalysis && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Trainer Constraints */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Users className="h-5 w-5" />
-                    <span>Contraintes Formateurs</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {capacityAnalysis.trainerConstraints?.slice(0, 5).map((constraint, index) => (
-                      <div key={constraint.trainerId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div>
-                          <p className="font-medium">{constraint.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {constraint.availableHours}h disponibles
-                          </p>
-                        </div>
-                        <Badge 
-                          className={constraint.isOverloaded ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
-                        >
-                          {constraint.isOverloaded ? "Surcharge" : "OK"}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Main Content Tabs */}
+          <Tabs value={selectedView} onValueChange={setSelectedView} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="monthly" data-testid="tab-monthly">Vue Mensuelle</TabsTrigger>
+              <TabsTrigger value="weekly" data-testid="tab-weekly">Vue Hebdomadaire</TabsTrigger>
+              <TabsTrigger value="constraints" data-testid="tab-constraints">Contraintes</TabsTrigger>
+              <TabsTrigger value="assignments" data-testid="tab-assignments">Affectations</TabsTrigger>
+            </TabsList>
 
-              {/* Room Constraints */}
+            {/* Monthly View */}
+            <TabsContent value="monthly" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Calendar className="h-5 w-5" />
-                    <span>Contraintes Salles</span>
+                    <span>Planification Mensuelle - {selectedYear}</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {capacityAnalysis.roomConstraints?.slice(0, 5).map((constraint, index) => (
-                      <div key={constraint.roomId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <div>
-                          <p className="font-medium">{constraint.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {constraint.type === 'workshop' ? 'Atelier' : 'Salle'} - {constraint.availableCapacity}h libres
-                          </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {capacityAnalysis?.monthlyPlanning?.map((month, index) => (
+                      <Card key={`${month.year}-${month.month}`} className="border-l-4 border-l-blue-500">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-semibold" data-testid={`text-month-${index}`}>
+                              {month.monthName} {month.year}
+                            </h4>
+                            <Badge variant={month.conflicts.length > 0 ? "destructive" : "default"}>
+                              {month.conflicts.length > 0 ? "Conflits" : "OK"}
+                            </Badge>
+                          </div>
+                          
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Groupes:</span>
+                              <span className="font-medium" data-testid={`text-month-groups-${index}`}>
+                                {month.totalGroups}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Heures Formateurs:</span>
+                              <span className="font-medium" data-testid={`text-month-trainer-hours-${index}`}>
+                                {month.totalTrainerHours}h
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Heures Salles:</span>
+                              <span className="font-medium" data-testid={`text-month-room-hours-${index}`}>
+                                {month.totalRoomHours}h
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {month.conflicts.length > 0 && (
+                            <div className="mt-3 space-y-1">
+                              {month.conflicts.map((conflict, conflictIndex) => (
+                                <div key={conflictIndex} className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                                  {conflict.description}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Weekly View */}
+            <TabsContent value="weekly" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Clock className="h-5 w-5" />
+                    <span>Planification Hebdomadaire Détaillée</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    {capacityAnalysis?.weeklyPlanning?.slice(0, 12).map((week, index) => (
+                      <Card key={week.week} className="border-l-4 border-l-green-500">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg" data-testid={`text-week-title-${index}`}>
+                              Semaine {week.week}
+                            </CardTitle>
+                            <Badge variant="outline" data-testid={`text-week-dates-${index}`}>
+                              {new Date(week.startDate).toLocaleDateString('fr-FR')} - {new Date(week.endDate).toLocaleDateString('fr-FR')}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Groups and Modules */}
+                            <div className="lg:col-span-2">
+                              <h5 className="font-medium mb-3 flex items-center">
+                                <BookOpen className="h-4 w-4 mr-2" />
+                                Groupes et Modules
+                              </h5>
+                              <div className="space-y-3">
+                                {week.groups.map((group, groupIndex) => (
+                                  <div key={group.groupId} className="p-3 bg-blue-50 rounded-lg">
+                                    <h6 className="font-medium text-blue-800 mb-2" data-testid={`text-group-name-${index}-${groupIndex}`}>
+                                      {group.groupName}
+                                    </h6>
+                                    <div className="space-y-2">
+                                      {group.modules.map((module, moduleIndex) => (
+                                        <div key={module.moduleId} className="flex items-center justify-between p-2 bg-white rounded border">
+                                          <div>
+                                            <p className="font-medium text-sm" data-testid={`text-module-name-${index}-${groupIndex}-${moduleIndex}`}>
+                                              {module.moduleName}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground" data-testid={`text-module-trainer-${index}-${groupIndex}-${moduleIndex}`}>
+                                              {module.trainerName}
+                                            </p>
+                                          </div>
+                                          <div className="text-right">
+                                            <Badge variant={module.type === 'practical' ? 'default' : 'secondary'}>
+                                              {module.type === 'practical' ? 'Pratique' : 'Théorique'}
+                                            </Badge>
+                                            <p className="text-sm font-medium mt-1" data-testid={`text-module-hours-${index}-${groupIndex}-${moduleIndex}`}>
+                                              {module.weeklyHours}h/sem
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              sur {module.totalHours}h total
+                                            </p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                
+                                {week.groups.length === 0 && (
+                                  <div className="text-center py-4 text-muted-foreground">
+                                    <p>Aucune formation planifiée cette semaine</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Weekly Summary */}
+                            <div>
+                              <h5 className="font-medium mb-3 flex items-center">
+                                <BarChart3 className="h-4 w-4 mr-2" />
+                                Résumé Semaine
+                              </h5>
+                              
+                              {/* Trainer Workload */}
+                              <div className="mb-4">
+                                <h6 className="text-sm font-medium mb-2">Charge Formateurs</h6>
+                                <div className="space-y-2">
+                                  {week.trainerWorkload.slice(0, 5).map((trainer, trainerIndex) => (
+                                    <div key={trainer.trainerId} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                                      <span className="text-sm" data-testid={`text-trainer-week-${index}-${trainerIndex}`}>
+                                        {trainer.name}
+                                      </span>
+                                      <Badge variant="outline" data-testid={`text-trainer-hours-${index}-${trainerIndex}`}>
+                                        {trainer.weeklyHours}h
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Room Occupancy */}
+                              <div>
+                                <h6 className="text-sm font-medium mb-2">Occupation Salles</h6>
+                                <div className="space-y-2">
+                                  {week.roomOccupancy.slice(0, 5).map((room, roomIndex) => (
+                                    <div key={room.roomId} className="flex items-center justify-between p-2 bg-muted/50 rounded">
+                                      <span className="text-sm" data-testid={`text-room-week-${index}-${roomIndex}`}>
+                                        {room.name}
+                                      </span>
+                                      <Badge variant="outline" data-testid={`text-room-hours-${index}-${roomIndex}`}>
+                                        {room.occupiedHours}h
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Constraints View */}
+            <TabsContent value="constraints" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Trainer Constraints */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Users className="h-5 w-5" />
+                      <span>Contraintes Formateurs</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {capacityAnalysis?.trainerConstraints?.map((constraint, index) => (
+                        <div key={constraint.trainerId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <p className="font-medium" data-testid={`text-trainer-constraint-${index}`}>
+                              {constraint.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-trainer-available-${index}`}>
+                              {constraint.availableHours}h disponibles
+                            </p>
+                          </div>
+                          <Badge 
+                            className={constraint.isOverloaded ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                            data-testid={`badge-trainer-status-${index}`}
+                          >
+                            {constraint.isOverloaded ? "Surcharge" : "OK"}
+                          </Badge>
                         </div>
-                        <Badge 
-                          className={constraint.isOverbooked ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
-                        >
-                          {constraint.isOverbooked ? "Surbookée" : "OK"}
-                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Room Constraints */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Building className="h-5 w-5" />
+                      <span>Contraintes Salles</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {capacityAnalysis?.roomConstraints?.map((constraint, index) => (
+                        <div key={constraint.roomId} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                          <div>
+                            <p className="font-medium" data-testid={`text-room-constraint-${index}`}>
+                              {constraint.name}
+                            </p>
+                            <p className="text-sm text-muted-foreground" data-testid={`text-room-type-${index}`}>
+                              {constraint.type === 'workshop' ? 'Atelier' : 'Salle'} - {constraint.availableCapacity}h libres
+                            </p>
+                          </div>
+                          <Badge 
+                            className={constraint.isOverbooked ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}
+                            data-testid={`badge-room-status-${index}`}
+                          >
+                            {constraint.isOverbooked ? "Surbookée" : "OK"}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Recommendations */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <AlertTriangle className="h-5 w-5" />
+                    <span>Recommandations Système</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {capacityAnalysis?.recommendations?.map((recommendation, index) => (
+                      <div key={index} className="flex items-start space-x-2 p-3 rounded-lg bg-blue-50">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
+                        <p className="text-sm" data-testid={`text-recommendation-${index}`}>
+                          {recommendation}
+                        </p>
                       </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          )}
+            </TabsContent>
 
-          {/* Recommendations */}
-          {capacityAnalysis?.recommendations && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span>Recommandations</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {capacityAnalysis.recommendations.map((recommendation, index) => (
-                    <div key={index} className="flex items-start space-x-2 p-3 rounded-lg bg-blue-50">
-                      <div className="w-2 h-2 bg-blue-600 rounded-full mt-2"></div>
-                      <p className="text-sm">{recommendation}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {/* Monthly Analysis Indicators */}
-          <Card className="mb-6">
+            {/* Assignments View */}
+            <TabsContent value="assignments" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <CheckCircle className="h-5 w-5" />
+                    <span>Affectations par Groupe</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {capacityAnalysis?.groupAssignments?.map((assignment, index) => (
+                      <Card key={assignment.groupId} className="border">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-semibold" data-testid={`text-assignment-group-${index}`}>
+                              {assignment.groupName}
+                            </h4>
+                            <div className="flex space-x-2">
+                              <Badge variant="outline" data-testid={`badge-modules-count-${index}`}>
+                                {assignment.assignedModules} modules
+                              </Badge>
+                              <Badge variant="outline" data-testid={`badge-trainers-count-${index}`}>
+                                {assignment.assignedTrainers} formateurs
+                              </Badge>
+                              <Badge 
+                                className={assignment.hasRoom ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}
+                                data-testid={`badge-room-status-${index}`}
+                              >
+                                {assignment.hasRoom ? "Salle OK" : "Sans salle"}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          {/* Module details for this group */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {capacityAnalysis?.weeklyPlanning?.slice(0, 4).map((week, weekIndex) => {
+                              const groupWeek = week.groups.find(g => g.groupId === assignment.groupId);
+                              if (!groupWeek || groupWeek.modules.length === 0) return null;
+                              
+                              return (
+                                <div key={week.week} className="p-3 bg-muted/30 rounded">
+                                  <h6 className="font-medium text-sm mb-2">
+                                    Semaine {week.week}
+                                  </h6>
+                                  <div className="space-y-1">
+                                    {groupWeek.modules.map((module, moduleIndex) => (
+                                      <div key={module.moduleId} className="text-xs flex justify-between">
+                                        <span className="truncate">{module.moduleName}</span>
+                                        <span className="font-medium">{module.weeklyHours}h</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          {/* Detailed Planning Matrix */}
+          <Card className="mt-6">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="h-5 w-5" />
-                <span>Indicateurs Mensuels - {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {(() => {
-                  const currentMonth = new Date().getMonth();
-                  const currentYear = new Date().getFullYear();
-                  const indicators = calculateMonthlyIndicators(currentMonth, currentYear);
-                  const trainerConstraints = calculateTrainerConstraints(currentMonth, currentYear);
-                  
-                  return (
-                    <>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-600 font-medium">Participants Totaux</p>
-                        <p className="text-2xl font-bold text-blue-800">{indicators.participants}</p>
-                        <p className="text-xs text-blue-600">dans {indicators.activeGroups} groupes</p>
-                      </div>
-                      
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
-                        <p className="text-sm text-green-600 font-medium">Taux d'Occupation</p>
-                        <p className="text-2xl font-bold text-green-800">{indicators.occupationRate}%</p>
-                        <p className="text-xs text-green-600">capacité utilisée</p>
-                      </div>
-                      
-                      <div className="text-center p-4 bg-purple-50 rounded-lg">
-                        <p className="text-sm text-purple-600 font-medium">Formateurs Requis</p>
-                        <p className="text-2xl font-bold text-purple-800">{trainerConstraints.required}/{trainerConstraints.available}</p>
-                        <p className="text-xs text-purple-600">requis/disponibles</p>
-                      </div>
-                      
-                      <div className={`text-center p-4 rounded-lg ${
-                        indicators.conflicts > 0 ? 'bg-red-50' : 'bg-green-50'
-                      }`}>
-                        <p className={`text-sm font-medium ${
-                          indicators.conflicts > 0 ? 'text-red-600' : 'text-green-600'
-                        }`}>Conflits Détectés</p>
-                        <p className={`text-2xl font-bold ${
-                          indicators.conflicts > 0 ? 'text-red-800' : 'text-green-800'
-                        }`}>{indicators.conflicts}</p>
-                        <p className={`text-xs ${
-                          indicators.conflicts > 0 ? 'text-red-600' : 'text-green-600'
-                        }`}>{indicators.conflicts > 0 ? 'attention requise' : 'situation normale'}</p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Timeline Grid */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Calendar className="h-5 w-5" />
-                <span>Planning de Charge - {selectedYear}/{selectedYear + 1}</span>
+                <span>Matrice de Planification Détaillée</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <div className="min-w-[1200px]">
-                  {/* Header Row */}
-                  <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'minmax(150px, 200px) repeat(24, minmax(60px, 1fr))' }}>
-                    <div className="font-semibold text-sm p-2 bg-muted rounded">Groupe</div>
-                    {yearRange.map(year => 
-                      months.map((month, monthIndex) => (
-                        <div key={`${year}-${monthIndex}`} className="font-semibold text-xs p-1 bg-muted rounded text-center">
-                          {month}<br/>{year}
-                        </div>
-                      ))
-                    )}
+                <div className="min-w-[1400px]">
+                  {/* Header */}
+                  <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'minmax(200px, 250px) repeat(12, minmax(100px, 1fr))' }}>
+                    <div className="font-semibold text-sm p-2 bg-muted rounded">Ressource / Semaine</div>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <div key={i} className="font-semibold text-xs p-2 bg-muted rounded text-center">
+                        Sem. {i + 1}
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Groups Rows */}
-                  {groups?.map(group => (
-                    <div key={group.id} className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(150px, 200px) repeat(24, minmax(60px, 1fr))' }}>
-                      <div className="p-2 border rounded font-medium text-sm bg-card">
-                        <div className="truncate">{group.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {group.participantCount} pers.
+                  {/* Trainer Rows */}
+                  {capacityAnalysis?.trainerConstraints?.map((trainer, trainerIndex) => (
+                    <div key={trainer.trainerId} className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(200px, 250px) repeat(12, minmax(100px, 1fr))' }}>
+                      <div className="p-2 border rounded font-medium text-sm bg-blue-50">
+                        <div className="truncate">{trainer.name}</div>
+                        <div className="text-xs text-blue-600">
+                          Formateur - {trainer.availableHours}h dispo
                         </div>
                       </div>
-                      {yearRange.map(year => 
-                        months.map((_, monthIndex) => {
-                          const timeline = getGroupTimeline(group, monthIndex, year);
-                          return (
-                            <div key={`${year}-${monthIndex}`} className="relative">
-                              <div className={`h-12 border rounded p-1 ${
-                                timeline.isActive 
-                                  ? group.status === 'active' 
-                                    ? 'bg-green-200 border-green-400' 
-                                    : group.status === 'delayed'
-                                    ? 'bg-amber-200 border-amber-400'
-                                    : 'bg-blue-200 border-blue-400'
-                                  : 'bg-gray-50'
-                              }`}>
-                                {timeline.isStart && (
-                                  <div className="absolute top-0 left-0 w-2 h-full bg-green-600 rounded-l"></div>
-                                )}
-                                {timeline.isEnd && (
-                                  <div className="absolute top-0 right-0 w-2 h-full bg-red-600 rounded-r"></div>
-                                )}
-                                {timeline.isActive && (
-                                  <div className="text-xs text-center mt-1">
-                                    {timeline.isStart && '🟢'}
-                                    {timeline.isEnd && '🔴'}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
+                      {Array.from({ length: 12 }, (_, weekIndex) => {
+                        const week = capacityAnalysis?.weeklyPlanning?.find(w => w.week === weekIndex + 1);
+                        const trainerHours = week?.trainerWorkload.find(tw => tw.trainerId === trainer.trainerId)?.weeklyHours || 0;
+                        const isOverloaded = trainerHours > (trainer.availableHours / 4); // Rough weekly limit
+                        
+                        return (
+                          <div key={weekIndex} className={`h-12 border rounded flex items-center justify-center text-sm font-bold ${
+                            isOverloaded ? 'bg-red-200 text-red-800' : 
+                            trainerHours > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-50'
+                          }`} data-testid={`cell-trainer-${trainerIndex}-week-${weekIndex}`}>
+                            {trainerHours > 0 ? `${trainerHours}h` : ''}
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
 
-                  {/* Constraints Rows */}
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(150px, 200px) repeat(24, minmax(60px, 1fr))' }}>
-                      <div className="p-2 border rounded font-medium text-sm bg-amber-50">
-                        Contrainte Salle
-                      </div>
-                      {yearRange.map(year => 
-                        months.map((_, monthIndex) => {
-                          const constraints = calculateRoomConstraints(monthIndex, year);
-                          const conflict = hasConflict(constraints);
-                          return (
-                            <div key={`classroom-${year}-${monthIndex}`} className={`h-8 border rounded flex items-center justify-center text-sm font-bold ${
-                              conflict ? 'bg-red-200 text-red-800' : constraints.classroom > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-50'
-                            }`}>
-                              {constraints.classroom > 0 ? constraints.classroom : ''}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                    
-                    <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(150px, 200px) repeat(24, minmax(60px, 1fr))' }}>
-                      <div className="p-2 border rounded font-medium text-sm bg-blue-50">
-                        Contrainte Atelier
-                      </div>
-                      {yearRange.map(year => 
-                        months.map((_, monthIndex) => {
-                          const constraints = calculateRoomConstraints(monthIndex, year);
-                          const conflict = hasConflict(constraints);
-                          return (
-                            <div key={`workshop-${year}-${monthIndex}`} className={`h-8 border rounded flex items-center justify-center text-sm font-bold ${
-                              conflict ? 'bg-red-200 text-red-800' : constraints.workshop > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-50'
-                            }`}>
-                              {constraints.workshop > 0 ? constraints.workshop : ''}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                    
-                    <div className="grid gap-1" style={{ gridTemplateColumns: 'minmax(150px, 200px) repeat(24, minmax(60px, 1fr))' }}>
+                  {/* Room Rows */}
+                  {capacityAnalysis?.roomConstraints?.map((room, roomIndex) => (
+                    <div key={room.roomId} className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(200px, 250px) repeat(12, minmax(100px, 1fr))' }}>
                       <div className="p-2 border rounded font-medium text-sm bg-purple-50">
-                        Contrainte Formateur
+                        <div className="truncate">{room.name}</div>
+                        <div className="text-xs text-purple-600">
+                          {room.type === 'workshop' ? 'Atelier' : 'Salle'} - {room.availableCapacity}h libres
+                        </div>
                       </div>
-                      {yearRange.map(year => 
-                        months.map((_, monthIndex) => {
-                          const trainerConstraints = calculateTrainerConstraints(monthIndex, year);
-                          const conflict = hasTrainerConflict(trainerConstraints);
-                          return (
-                            <div key={`trainer-${year}-${monthIndex}`} className={`h-8 border rounded flex items-center justify-center text-sm font-bold ${
-                              conflict ? 'bg-red-200 text-red-800' : trainerConstraints.required > 0 ? 'bg-purple-100 text-purple-800' : 'bg-gray-50'
-                            }`}>
-                              {trainerConstraints.required > 0 ? `${trainerConstraints.required}/${trainerConstraints.available}` : ''}
-                            </div>
-                          );
-                        })
-                      )}
+                      {Array.from({ length: 12 }, (_, weekIndex) => {
+                        const week = capacityAnalysis?.weeklyPlanning?.find(w => w.week === weekIndex + 1);
+                        const roomHours = week?.roomOccupancy.find(ro => ro.roomId === room.roomId)?.occupiedHours || 0;
+                        const isOverbooked = roomHours > 40; // 40h per week max
+                        
+                        return (
+                          <div key={weekIndex} className={`h-12 border rounded flex items-center justify-center text-sm font-bold ${
+                            isOverbooked ? 'bg-red-200 text-red-800' : 
+                            roomHours > 0 ? 'bg-purple-100 text-purple-800' : 'bg-gray-50'
+                          }`} data-testid={`cell-room-${roomIndex}-week-${weekIndex}`}>
+                            {roomHours > 0 ? `${roomHours}h` : ''}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </CardContent>
@@ -563,47 +668,33 @@ export default function Capacity() {
           {/* Legend */}
           <Card className="mt-4">
             <CardHeader>
-              <CardTitle className="text-lg">Légende</CardTitle>
+              <CardTitle className="text-lg">Légende du Tableau</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-green-200 border-green-400 border rounded"></div>
-                  <span className="text-sm">Formation active</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-blue-200 border-blue-400 border rounded"></div>
-                  <span className="text-sm">Formation planifiée</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-amber-200 border-amber-400 border rounded"></div>
-                  <span className="text-sm">Formation retardée</span>
+                  <div className="w-4 h-4 bg-green-100 border-green-400 border rounded"></div>
+                  <span className="text-sm">Charge normale</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 bg-red-200 border-red-400 border rounded"></div>
-                  <span className="text-sm">Conflit de ressources</span>
+                  <span className="text-sm">Surcharge détectée</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-4 bg-green-600 rounded"></div>
-                  <span className="text-sm">Début de formation</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-4 bg-red-600 rounded"></div>
-                  <span className="text-sm">Fin prévue</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm">🟢 = Démarrage</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm">🔴 = Fin provisoire</span>
+                  <div className="w-4 h-4 bg-blue-100 border-blue-400 border rounded"></div>
+                  <span className="text-sm">Formateur assigné</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="w-4 h-4 bg-purple-100 border-purple-400 border rounded"></div>
-                  <span className="text-sm">Contrainte formateur</span>
+                  <span className="text-sm">Salle occupée</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-sm font-mono">X/Y</span>
-                  <span className="text-sm">= Requis/Disponibles</span>
+                  <span className="text-sm font-mono">XXh</span>
+                  <span className="text-sm">= Volume horaire hebdomadaire</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm">Sem. X</span>
+                  <span className="text-sm">= Numéro de semaine</span>
                 </div>
               </div>
             </CardContent>

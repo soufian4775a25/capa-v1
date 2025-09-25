@@ -33,6 +33,8 @@ export interface ExportData {
   generatedAt?: string;
   capacityAnalysis?: any;
   schedules?: any[];
+  weeklyPlanning?: any[];
+  monthlyPlanning?: any[];
 }
 
 export async function exportToExcel(data: ExportData): Promise<void> {
@@ -154,6 +156,49 @@ function generateCSVContent(data: ExportData): string {
       const moduleName = data.modules?.find(m => m.id === schedule.moduleId)?.name || 'Inconnu';
       const trainerName = data.trainers?.find(t => t.id === schedule.trainerId)?.name || 'Inconnu';
       lines.push(`${groupName},${moduleName},${trainerName},${schedule.scheduledOrder},${schedule.status},${schedule.progress}%`);
+    });
+    lines.push('');
+  }
+  
+  // Weekly Planning
+  if (data.weeklyPlanning && data.weeklyPlanning.length > 0) {
+    lines.push('PLANIFICATION HEBDOMADAIRE DÉTAILLÉE');
+    lines.push('Semaine,Dates,Groupe,Module,Formateur,Volume Horaire,Type');
+    data.weeklyPlanning.forEach(week => {
+      week.groups.forEach(group => {
+        group.modules.forEach(module => {
+          lines.push(`${week.week},${week.startDate} - ${week.endDate},${group.groupName},${module.moduleName},${module.trainerName},${module.weeklyHours}h,${module.type}`);
+        });
+      });
+    });
+    lines.push('');
+    
+    lines.push('CHARGE HEBDOMADAIRE FORMATEURS');
+    lines.push('Semaine,Formateur,Heures Assignées');
+    data.weeklyPlanning.forEach(week => {
+      week.trainerWorkload.forEach(trainer => {
+        lines.push(`${week.week},${trainer.name},${trainer.weeklyHours}h`);
+      });
+    });
+    lines.push('');
+    
+    lines.push('OCCUPATION HEBDOMADAIRE SALLES');
+    lines.push('Semaine,Salle,Heures Occupées');
+    data.weeklyPlanning.forEach(week => {
+      week.roomOccupancy.forEach(room => {
+        lines.push(`${week.week},${room.name},${room.occupiedHours}h`);
+      });
+    });
+    lines.push('');
+  }
+  
+  // Monthly Planning
+  if (data.monthlyPlanning && data.monthlyPlanning.length > 0) {
+    lines.push('PLANIFICATION MENSUELLE');
+    lines.push('Mois,Année,Groupes Totaux,Heures Formateurs,Heures Salles,Conflits');
+    data.monthlyPlanning.forEach(month => {
+      const conflictsText = month.conflicts.map(c => c.description).join('; ') || 'Aucun';
+      lines.push(`${month.monthName},${month.year},${month.totalGroups},${month.totalTrainerHours}h,${month.totalRoomHours}h,"${conflictsText}"`);
     });
     lines.push('');
   }
@@ -372,6 +417,70 @@ function generateHTMLContent(data: ExportData): string {
             ${data.capacityAnalysis.recommendations?.map(rec => `<li>${rec}</li>`).join('') || ''}
           </ul>
         </div>
+      </div>
+      ` : ''}
+      
+      ${data.weeklyPlanning && data.weeklyPlanning.length > 0 ? `
+      <div class="section">
+        <h2>Planification Hebdomadaire Détaillée</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Semaine</th>
+              <th>Dates</th>
+              <th>Groupe</th>
+              <th>Module</th>
+              <th>Formateur</th>
+              <th>Volume Horaire</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.weeklyPlanning.slice(0, 10).map(week => 
+              week.groups.map(group => 
+                group.modules.map(module => `
+                  <tr>
+                    <td>${week.week}</td>
+                    <td>${week.startDate} - ${week.endDate}</td>
+                    <td>${group.groupName}</td>
+                    <td>${module.moduleName}</td>
+                    <td>${module.trainerName}</td>
+                    <td>${module.weeklyHours}h</td>
+                    <td>${module.type === 'practical' ? 'Pratique' : 'Théorique'}</td>
+                  </tr>
+                `).join('')
+              ).join('')
+            ).join('')}
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+      
+      ${data.monthlyPlanning && data.monthlyPlanning.length > 0 ? `
+      <div class="section">
+        <h2>Résumé Mensuel</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Mois</th>
+              <th>Groupes</th>
+              <th>Heures Formateurs</th>
+              <th>Heures Salles</th>
+              <th>Conflits</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.monthlyPlanning.slice(0, 6).map(month => `
+              <tr>
+                <td>${month.monthName} ${month.year}</td>
+                <td>${month.totalGroups}</td>
+                <td>${month.totalTrainerHours}h</td>
+                <td>${month.totalRoomHours}h</td>
+                <td style="color: ${month.conflicts.length > 0 ? '#dc2626' : '#16a34a'}">${month.conflicts.length > 0 ? month.conflicts.length + ' conflit(s)' : 'Aucun'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
       ` : ''}
       

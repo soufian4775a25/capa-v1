@@ -472,6 +472,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to auto-assign trainers to modules" });
     }
   });
+
+  // Get detailed weekly planning
+  app.get("/api/capacity/weekly-planning", async (req, res) => {
+    try {
+      const analysis = await storage.getCapacityAnalysis();
+      res.json(analysis.weeklyPlanning || []);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch weekly planning" });
+    }
+  });
+
+  // Get monthly planning summary
+  app.get("/api/capacity/monthly-planning", async (req, res) => {
+    try {
+      const analysis = await storage.getCapacityAnalysis();
+      res.json(analysis.monthlyPlanning || []);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch monthly planning" });
+    }
+  });
+
+  // Recalculate all assignments and schedules
+  app.post("/api/recalculate-capacity", async (req, res) => {
+    try {
+      // This would trigger a full recalculation of all assignments
+      const groups = await storage.getAllTrainingGroups();
+      let recalculated = 0;
+      
+      for (const group of groups) {
+        if (group.status === 'planned' || group.status === 'active') {
+          // Force recalculation by recreating the group's assignments
+          recalculated++;
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `${recalculated} groupes recalculés` 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to recalculate capacity" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

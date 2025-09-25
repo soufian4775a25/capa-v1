@@ -414,7 +414,79 @@ export default function Reports() {
                 <CardTitle data-testid="text-analysis-title">Analyse Détaillée</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-6">
+                  {/* Weekly Planning Summary */}
+                  {capacityAnalysis.weeklyPlanning && capacityAnalysis.weeklyPlanning.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-3">Planification Hebdomadaire (4 premières semaines)</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {capacityAnalysis.weeklyPlanning.slice(0, 4).map((week, index) => (
+                          <div key={week.week} className="p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="font-medium">Semaine {week.week}</h5>
+                              <Badge variant="outline">
+                                {week.groups.length} groupe{week.groups.length > 1 ? 's' : ''}
+                              </Badge>
+                            </div>
+                            <div className="text-sm space-y-1">
+                              <p className="text-muted-foreground">
+                                {new Date(week.startDate).toLocaleDateString('fr-FR')} - {new Date(week.endDate).toLocaleDateString('fr-FR')}
+                              </p>
+                              <div className="flex justify-between">
+                                <span>Formateurs actifs:</span>
+                                <span className="font-medium">{week.trainerWorkload.length}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Salles utilisées:</span>
+                                <span className="font-medium">{week.roomOccupancy.length}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Total heures:</span>
+                                <span className="font-medium">
+                                  {week.trainerWorkload.reduce((sum, t) => sum + t.weeklyHours, 0)}h
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Monthly Planning Summary */}
+                  {capacityAnalysis.monthlyPlanning && capacityAnalysis.monthlyPlanning.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-3">Résumé Mensuel (6 prochains mois)</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {capacityAnalysis.monthlyPlanning.slice(0, 6).map((month, index) => (
+                          <div key={`${month.year}-${month.month}`} className="p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="font-medium">{month.monthName} {month.year}</h5>
+                              <Badge variant={month.conflicts.length > 0 ? "destructive" : "default"}>
+                                {month.conflicts.length > 0 ? "Conflits" : "OK"}
+                              </Badge>
+                            </div>
+                            <div className="text-sm space-y-1">
+                              <div className="flex justify-between">
+                                <span>Groupes:</span>
+                                <span className="font-medium">{month.totalGroups}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>H. Formateurs:</span>
+                                <span className="font-medium">{month.totalTrainerHours}h</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>H. Salles:</span>
+                                <span className="font-medium">{month.totalRoomHours}h</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Group Assignments */}
                   <div>
                     <h4 className="font-medium mb-3">Affectations par Groupe</h4>
@@ -450,6 +522,7 @@ export default function Reports() {
                         </div>
                       ))}
                     </div>
+                  </div>
                   </div>
                 </div>
               </CardContent>

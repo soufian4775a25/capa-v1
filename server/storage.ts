@@ -341,16 +341,24 @@ export class MemStorage implements IStorage {
     const activeTrainers = Array.from(this.trainers.values()).filter(t => t.isActive);
     const assignments = Array.from(this.moduleTrainerAssignments.values());
 
-    // Create schedules for each module
-    for (let i = 0; i < activeModules.length; i++) {
-      const module = activeModules[i];
+    // Sort modules by total hours (longer modules first for better planning)
+    const sortedModules = activeModules.sort((a, b) => b.totalHours - a.totalHours);
+    
+    let currentWeek = 1;
+    const groupStartDate = new Date(group.startDate);
+    
+    // Create schedules for each module with weekly planning
+    for (let i = 0; i < sortedModules.length; i++) {
+      const module = sortedModules[i];
       
       // Find a trainer who can teach this module
       const availableTrainers = activeTrainers.filter(trainer => {
         const assignment = assignments.find(a => a.moduleId === module.id && a.trainerId === trainer.id);
         return assignment?.canTeach || trainer.specialties?.some(spec => 
           module.name.toLowerCase().includes(spec.toLowerCase()) ||
-          spec.toLowerCase().includes(module.name.toLowerCase())
+          spec.toLowerCase().includes(module.name.toLowerCase()) ||
+          (module.type === 'practical' && spec.toLowerCase().includes('pratique')) ||
+          (module.type === 'theoretical' && spec.toLowerCase().includes('théorique'))
         );
       });
 
@@ -361,7 +369,18 @@ export class MemStorage implements IStorage {
       }, null as Trainer | null);
 
       if (selectedTrainer) {
-        // Create group module schedule
+        // Calculate module duration in weeks
+        const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
+        const moduleDurationWeeks = Math.ceil(module.totalHours / weeklyHours);
+        
+        // Calculate start and end dates for this module
+        const moduleStartDate = new Date(groupStartDate);
+        moduleStartDate.setDate(moduleStartDate.getDate() + (currentWeek - 1) * 7);
+        
+        const moduleEndDate = new Date(moduleStartDate);
+        moduleEndDate.setDate(moduleEndDate.getDate() + (moduleDurationWeeks * 7) - 1);
+
+        // Create group module schedule with detailed planning
         const scheduleId = randomUUID();
         const schedule: GroupModuleSchedule = {
           id: scheduleId,
@@ -369,8 +388,8 @@ export class MemStorage implements IStorage {
           moduleId: module.id,
           trainerId: selectedTrainer.id,
           scheduledOrder: i + 1,
-          startDate: null,
-          endDate: null,
+          startDate: moduleStartDate,
+          endDate: moduleEndDate,
           progress: 0,
           hoursCompleted: "0",
           status: "planned"
@@ -378,7 +397,6 @@ export class MemStorage implements IStorage {
         this.groupModuleSchedules.set(scheduleId, schedule);
 
         // Update trainer workload
-        const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
         selectedTrainer.currentHoursPerWeek += weeklyHours;
         this.trainers.set(selectedTrainer.id, selectedTrainer);
 
@@ -396,7 +414,18 @@ export class MemStorage implements IStorage {
           };
           this.moduleTrainerAssignments.set(assignmentId, assignment);
         }
+        
+        // Move to next week for next module
+        currentWeek += moduleDurationWeeks;
       }
+    }
+    
+    // Update group estimated end date based on module planning
+    if (currentWeek > 1) {
+      const estimatedEndDate = new Date(groupStartDate);
+      estimatedEndDate.setDate(estimatedEndDate.getDate() + (currentWeek - 1) * 7);
+      group.estimatedEndDate = estimatedEndDate;
+      this.trainingGroups.set(groupId, group);
     }
   }
 
@@ -478,6 +507,35 @@ export class MemStorage implements IStorage {
     trainerConstraints: Array<{trainerId: string, name: string, isOverloaded: boolean, availableHours: number}>;
     roomConstraints: Array<{roomId: string, name: string, type: string, isOverbooked: boolean, availableCapacity: number}>;
     groupAssignments: Array<{groupId: string, groupName: string, assignedModules: number, assignedTrainers: number, hasRoom: boolean}>;
+    weeklyPlanning: Array<{
+      week: number;
+      startDate: string;
+      endDate: string;
+      groups: Array<{
+        groupId: string;
+        groupName: string;
+        modules: Array<{
+          moduleId: string;
+          moduleName: string;
+          trainerId: string;
+          trainerName: string;
+          weeklyHours: number;
+          totalHours: number;
+          type: string;
+        }>;
+      }>;
+      trainerWorkload: Array<{trainerId: string, name: string, weeklyHours: number}>;
+      roomOccupancy: Array<{roomId: string, name: string, occupiedHours: number}>;
+    }>;
+    monthlyPlanning: Array<{
+      month: number;
+      year: number;
+      monthName: string;
+      totalGroups: number;
+      totalTrainerHours: number;
+      totalRoomHours: number;
+      conflicts: Array<{type: string, description: string}>;
+    }>;
     recommendations: string[];
   }> {
     const trainerWorkload = await this.calculateTrainerWorkload();
@@ -540,12 +598,233 @@ export class MemStorage implements IStorage {
       recommendations.push("Capacité optimale - possibilité de lancer de nouveaux groupes");
     }
 
+    // Generate weekly planning
+    const weeklyPlanning = await this.generateWeeklyPlanning();
+    
+    // Generate monthly planning
+    const monthlyPlanning = await this.generateMonthlyPlanning();
     return {
       trainerConstraints,
       roomConstraints,
       groupAssignments,
+      weeklyPlanning,
+      monthlyPlanning,
       recommendations
     };
+  }
+
+  // Generate detailed weekly planning
+  private async generateWeeklyPlanning(): Promise<Array<{
+    week: number;
+    startDate: string;
+    endDate: string;
+    groups: Array<{
+      groupId: string;
+      groupName: string;
+      modules: Array<{
+        moduleId: string;
+        moduleName: string;
+        trainerId: string;
+        trainerName: string;
+        weeklyHours: number;
+        totalHours: number;
+        type: string;
+      }>;
+    }>;
+    trainerWorkload: Array<{trainerId: string, name: string, weeklyHours: number}>;
+    roomOccupancy: Array<{roomId: string, name: string, occupiedHours: number}>;
+  }>> {
+    const schedules = await this.getGroupModuleSchedules();
+    const groups = await this.getAllTrainingGroups();
+    const modules = await this.getAllModules();
+    const trainers = await this.getAllTrainers();
+    const rooms = await this.getAllRooms();
+    
+    const weeklyData = new Map<number, any>();
+    
+    // Process each schedule to build weekly view
+    schedules.forEach(schedule => {
+      if (!schedule.startDate || !schedule.endDate) return;
+      
+      const startDate = new Date(schedule.startDate);
+      const endDate = new Date(schedule.endDate);
+      const group = groups.find(g => g.id === schedule.groupId);
+      const module = modules.find(m => m.id === schedule.moduleId);
+      const trainer = trainers.find(t => t.id === schedule.trainerId);
+      
+      if (!group || !module || !trainer) return;
+      
+      // Calculate weeks covered by this module
+      const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
+      const moduleDurationWeeks = Math.ceil(module.totalHours / weeklyHours);
+      
+      for (let week = 0; week < moduleDurationWeeks; week++) {
+        const weekStartDate = new Date(startDate);
+        weekStartDate.setDate(weekStartDate.getDate() + week * 7);
+        
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+        
+        const weekNumber = Math.floor((weekStartDate.getTime() - new Date(group.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        
+        if (!weeklyData.has(weekNumber)) {
+          weeklyData.set(weekNumber, {
+            week: weekNumber,
+            startDate: weekStartDate.toISOString().split('T')[0],
+            endDate: weekEndDate.toISOString().split('T')[0],
+            groups: new Map(),
+            trainerWorkload: new Map(),
+            roomOccupancy: new Map()
+          });
+        }
+        
+        const weekData = weeklyData.get(weekNumber);
+        
+        // Add group module data
+        if (!weekData.groups.has(group.id)) {
+          weekData.groups.set(group.id, {
+            groupId: group.id,
+            groupName: group.name,
+            modules: []
+          });
+        }
+        
+        weekData.groups.get(group.id).modules.push({
+          moduleId: module.id,
+          moduleName: module.name,
+          trainerId: trainer.id,
+          trainerName: trainer.name,
+          weeklyHours: weeklyHours,
+          totalHours: module.totalHours,
+          type: module.type
+        });
+        
+        // Update trainer workload for this week
+        const currentTrainerHours = weekData.trainerWorkload.get(trainer.id) || 0;
+        weekData.trainerWorkload.set(trainer.id, currentTrainerHours + weeklyHours);
+        
+        // Update room occupancy for this week
+        if (group.roomId) {
+          const room = rooms.find(r => r.id === group.roomId);
+          if (room) {
+            const currentRoomHours = weekData.roomOccupancy.get(room.id) || 0;
+            weekData.roomOccupancy.set(room.id, currentRoomHours + weeklyHours);
+          }
+        }
+      }
+    });
+    
+    // Convert maps to arrays and sort by week
+    return Array.from(weeklyData.values())
+      .sort((a, b) => a.week - b.week)
+      .map(weekData => ({
+        ...weekData,
+        groups: Array.from(weekData.groups.values()),
+        trainerWorkload: Array.from(weekData.trainerWorkload.entries()).map(([trainerId, hours]) => {
+          const trainer = trainers.find(t => t.id === trainerId);
+          return {
+            trainerId,
+            name: trainer?.name || 'Unknown',
+            weeklyHours: hours
+          };
+        }),
+        roomOccupancy: Array.from(weekData.roomOccupancy.entries()).map(([roomId, hours]) => {
+          const room = rooms.find(r => r.id === roomId);
+          return {
+            roomId,
+            name: room?.name || 'Unknown',
+            occupiedHours: hours
+          };
+        })
+      }));
+  }
+
+  // Generate monthly planning summary
+  private async generateMonthlyPlanning(): Promise<Array<{
+    month: number;
+    year: number;
+    monthName: string;
+    totalGroups: number;
+    totalTrainerHours: number;
+    totalRoomHours: number;
+    conflicts: Array<{type: string, description: string}>;
+  }>> {
+    const groups = await this.getAllTrainingGroups();
+    const schedules = await this.getGroupModuleSchedules();
+    const trainers = await this.getAllTrainers();
+    const rooms = await this.getAllRooms();
+    
+    const monthlyData = new Map<string, any>();
+    const currentDate = new Date();
+    
+    // Generate data for next 12 months
+    for (let i = 0; i < 12; i++) {
+      const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+      const monthKey = `${targetDate.getFullYear()}-${targetDate.getMonth()}`;
+      
+      monthlyData.set(monthKey, {
+        month: targetDate.getMonth(),
+        year: targetDate.getFullYear(),
+        monthName: targetDate.toLocaleDateString('fr-FR', { month: 'long' }),
+        totalGroups: 0,
+        totalTrainerHours: 0,
+        totalRoomHours: 0,
+        conflicts: []
+      });
+    }
+    
+    // Process schedules to calculate monthly data
+    schedules.forEach(schedule => {
+      if (!schedule.startDate || !schedule.endDate) return;
+      
+      const startDate = new Date(schedule.startDate);
+      const endDate = new Date(schedule.endDate);
+      const group = groups.find(g => g.id === schedule.groupId);
+      const module = this.modules.get(schedule.moduleId);
+      
+      if (!group || !module) return;
+      
+      // Check which months this schedule overlaps
+      for (let date = new Date(startDate); date <= endDate; date.setMonth(date.getMonth() + 1)) {
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        const monthData = monthlyData.get(monthKey);
+        
+        if (monthData) {
+          monthData.totalGroups++;
+          const weeklyHours = Number(module.hoursPerSession) * module.sessionsPerWeek;
+          monthData.totalTrainerHours += weeklyHours * 4; // Approximate 4 weeks per month
+          monthData.totalRoomHours += weeklyHours * 4;
+        }
+      }
+    });
+    
+    // Detect conflicts for each month
+    monthlyData.forEach((monthData, monthKey) => {
+      const [year, month] = monthKey.split('-').map(Number);
+      
+      // Check trainer conflicts
+      const maxTrainerCapacity = trainers.reduce((sum, t) => sum + t.maxHoursPerWeek * 4, 0);
+      if (monthData.totalTrainerHours > maxTrainerCapacity) {
+        monthData.conflicts.push({
+          type: 'trainer',
+          description: `Surcharge formateurs: ${monthData.totalTrainerHours}h requis vs ${maxTrainerCapacity}h disponibles`
+        });
+      }
+      
+      // Check room conflicts
+      const maxRoomCapacity = rooms.length * 40 * 4; // 40h per week per room, 4 weeks
+      if (monthData.totalRoomHours > maxRoomCapacity) {
+        monthData.conflicts.push({
+          type: 'room',
+          description: `Surcharge salles: ${monthData.totalRoomHours}h requis vs ${maxRoomCapacity}h disponibles`
+        });
+      }
+    });
+    
+    return Array.from(monthlyData.values()).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    });
   }
 }
 
