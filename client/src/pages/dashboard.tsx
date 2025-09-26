@@ -8,21 +8,7 @@ import ProgressBar from "@/components/ui/progress-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Users, 
-  Building, 
-  UsersRound, 
-  TrendingUp, 
-  Plus, 
-  Download,
-  CheckCircle,
-  AlertTriangle,
-  Lightbulb,
-  UserPlus,
-  BarChart3,
-  BookOpen,
-  Calendar
-} from "lucide-react";
+import { Users, Building, UsersRound, TrendingUp, Plus, Download, CircleCheck as CheckCircle, TriangleAlert as AlertTriangle, Lightbulb, UserPlus, ChartBar as BarChart3, BookOpen, Calendar } from "lucide-react";
 import { exportToPDF, exportToExcel } from "@/lib/exports";
 import { useToast } from "@/hooks/use-toast";
 

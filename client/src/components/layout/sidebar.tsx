@@ -1,16 +1,6 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { 
-  LayoutDashboard, 
-  Users, 
-  BookOpen, 
-  UsersRound, 
-  Building, 
-  BarChart3, 
-  FileText, 
-  Grid3X3,
-  LogOut 
-} from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, UsersRound, Building, ChartBar as BarChart3, FileText, Grid3x3 as Grid3X3, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navigation = [
