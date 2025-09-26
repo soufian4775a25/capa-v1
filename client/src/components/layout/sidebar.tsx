@@ -8,6 +8,7 @@ import {
   Building, 
   BarChart3, 
   FileText, 
+  Grid3X3,
   LogOut 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const navigation = [
   { name: "Modules", href: "/modules", icon: BookOpen },
   { name: "Groupes Formation", href: "/groups", icon: UsersRound },
   { name: "Salles & Ateliers", href: "/rooms", icon: Building },
+  { name: "Matrice Compétences", href: "/competency-matrix", icon: Grid3X3 },
   { name: "Calcul Charge-Capa", href: "/capacity", icon: BarChart3 },
   { name: "Rapports", href: "/reports", icon: FileText },
 ];

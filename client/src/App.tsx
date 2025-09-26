@@ -12,6 +12,7 @@ import Groups from "@/pages/groups";
 import Rooms from "@/pages/rooms";
 import Capacity from "@/pages/capacity";
 import Reports from "@/pages/reports";
+import CompetencyMatrix from "@/pages/competency-matrix";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/rooms" component={Rooms} />
       <Route path="/capacity" component={Capacity} />
       <Route path="/reports" component={Reports} />
+      <Route path="/competency-matrix" component={CompetencyMatrix} />
       <Route component={NotFound} />
     </Switch>
   );
