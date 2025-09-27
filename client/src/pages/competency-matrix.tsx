@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Users, BookOpen, CheckCircle, XCircle, AlertTriangle, Download, RefreshCw, BarChart3 } from "lucide-react";
+import { Users, BookOpen, CircleCheck as CheckCircle, Circle as XCircle, TriangleAlert as AlertTriangle, Download, RefreshCw, ChartBar as BarChart3 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToPDF, exportToExcel } from "@/lib/exports";

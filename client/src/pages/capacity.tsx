@@ -8,18 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Calendar, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock, 
-  Users, 
-  BarChart3,
-  Building,
-  BookOpen,
-  TrendingUp,
-  Download
-} from "lucide-react";
+import { Calendar, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Users, ChartBar as BarChart3, Building, BookOpen, TrendingUp, Download } from "lucide-react";
 import { exportToPDF, exportToExcel } from "@/lib/exports";
 import { useToast } from "@/hooks/use-toast";
 
