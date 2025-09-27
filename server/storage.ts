@@ -618,9 +618,13 @@ export class MemStorage implements IStorage {
     week: number;
     startDate: string;
     endDate: string;
+    weekNumber: number;
+    monthName: string;
     groups: Array<{
       groupId: string;
       groupName: string;
+       roomName: string;
+       participantCount: number;
       modules: Array<{
         moduleId: string;
         moduleName: string;
@@ -629,6 +633,8 @@ export class MemStorage implements IStorage {
         weeklyHours: number;
         totalHours: number;
         type: string;
+        progress: number;
+        scheduledOrder: number;
       }>;
     }>;
     trainerWorkload: Array<{trainerId: string, name: string, weeklyHours: number}>;
@@ -641,6 +647,7 @@ export class MemStorage implements IStorage {
     const rooms = await this.getAllRooms();
     
     const weeklyData = new Map<number, any>();
+    const currentDate = new Date();
     
     // Process each schedule to build weekly view
     schedules.forEach(schedule => {
@@ -651,6 +658,7 @@ export class MemStorage implements IStorage {
       const group = groups.find(g => g.id === schedule.groupId);
       const module = modules.find(m => m.id === schedule.moduleId);
       const trainer = trainers.find(t => t.id === schedule.trainerId);
+      const room = rooms.find(r => r.id === group?.roomId);
       
       if (!group || !module || !trainer) return;
       
@@ -666,10 +674,14 @@ export class MemStorage implements IStorage {
         weekEndDate.setDate(weekEndDate.getDate() + 6);
         
         const weekNumber = Math.floor((weekStartDate.getTime() - new Date(group.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        const actualWeekNumber = Math.floor((weekStartDate.getTime() - currentDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        const monthName = weekStartDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
         
         if (!weeklyData.has(weekNumber)) {
           weeklyData.set(weekNumber, {
             week: weekNumber,
+            weekNumber: actualWeekNumber,
+            monthName: monthName,
             startDate: weekStartDate.toISOString().split('T')[0],
             endDate: weekEndDate.toISOString().split('T')[0],
             groups: new Map(),
@@ -685,6 +697,8 @@ export class MemStorage implements IStorage {
           weekData.groups.set(group.id, {
             groupId: group.id,
             groupName: group.name,
+            roomName: room?.name || 'Non assigné',
+            participantCount: group.participantCount,
             modules: []
           });
         }
@@ -696,7 +710,9 @@ export class MemStorage implements IStorage {
           trainerName: trainer.name,
           weeklyHours: weeklyHours,
           totalHours: module.totalHours,
-          type: module.type
+          type: module.type,
+          progress: schedule.progress || 0,
+          scheduledOrder: schedule.scheduledOrder
         });
         
         // Update trainer workload for this week

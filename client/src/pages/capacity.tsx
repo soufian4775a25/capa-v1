@@ -337,23 +337,40 @@ export default function Capacity() {
                             <div className="lg:col-span-2">
                               <h5 className="font-medium mb-3 flex items-center">
                                 <BookOpen className="h-4 w-4 mr-2" />
-                                Groupes et Modules
+                                Groupes et Modules - {week.monthName}
                               </h5>
                               <div className="space-y-3">
                                 {week.groups.map((group, groupIndex) => (
                                   <div key={group.groupId} className="p-3 bg-blue-50 rounded-lg">
-                                    <h6 className="font-medium text-blue-800 mb-2" data-testid={`text-group-name-${index}-${groupIndex}`}>
-                                      {group.groupName}
-                                    </h6>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h6 className="font-medium text-blue-800" data-testid={`text-group-name-${index}-${groupIndex}`}>
+                                        {group.groupName}
+                                      </h6>
+                                      <div className="flex items-center space-x-2">
+                                        <Badge variant="outline" className="text-xs">
+                                          {group.participantCount} participants
+                                        </Badge>
+                                        <Badge variant="outline" className="text-xs">
+                                          {group.roomName}
+                                        </Badge>
+                                      </div>
+                                    </div>
                                     <div className="space-y-2">
-                                      {group.modules.map((module, moduleIndex) => (
+                                      {group.modules
+                                        .sort((a, b) => a.scheduledOrder - b.scheduledOrder)
+                                        .map((module, moduleIndex) => (
                                         <div key={module.moduleId} className="flex items-center justify-between p-2 bg-white rounded border">
                                           <div>
-                                            <p className="font-medium text-sm" data-testid={`text-module-name-${index}-${groupIndex}-${moduleIndex}`}>
-                                              {module.moduleName}
-                                            </p>
+                                            <div className="flex items-center space-x-2">
+                                              <Badge variant="outline" className="text-xs">
+                                                #{module.scheduledOrder}
+                                              </Badge>
+                                              <p className="font-medium text-sm" data-testid={`text-module-name-${index}-${groupIndex}-${moduleIndex}`}>
+                                                {module.moduleName}
+                                              </p>
+                                            </div>
                                             <p className="text-xs text-muted-foreground" data-testid={`text-module-trainer-${index}-${groupIndex}-${moduleIndex}`}>
-                                              {module.trainerName}
+                                              {module.trainerName} - Progression: {module.progress}%
                                             </p>
                                           </div>
                                           <div className="text-right">
@@ -385,7 +402,7 @@ export default function Capacity() {
                             <div>
                               <h5 className="font-medium mb-3 flex items-center">
                                 <BarChart3 className="h-4 w-4 mr-2" />
-                                Résumé Semaine
+                                Résumé Semaine {week.week}
                               </h5>
                               
                               {/* Trainer Workload */}
@@ -402,6 +419,11 @@ export default function Capacity() {
                                       </Badge>
                                     </div>
                                   ))}
+                                  {week.trainerWorkload.length === 0 && (
+                                    <div className="text-center py-2 text-muted-foreground text-xs">
+                                      Aucun formateur assigné
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
@@ -419,6 +441,11 @@ export default function Capacity() {
                                       </Badge>
                                     </div>
                                   ))}
+                                  {week.roomOccupancy.length === 0 && (
+                                    <div className="text-center py-2 text-muted-foreground text-xs">
+                                      Aucune salle occupée
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

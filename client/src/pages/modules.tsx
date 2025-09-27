@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import ModuleForm from "@/components/forms/module-form";
-import { Plus, CreditCard as Edit, Trash2, BookOpen, Clock, Users, Target } from "lucide-react";
+import { Plus, Edit, Trash2, BookOpen, Clock, Users, Target } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Module, ModuleTrainerAssignment } from "@shared/schema";

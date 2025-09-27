@@ -437,10 +437,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const trainers = await storage.getAllTrainers();
       const modules = await storage.getAllModules();
+      const existingAssignments = await storage.getModuleTrainerAssignments();
       let assignmentsCreated = 0;
 
       for (const trainer of trainers) {
         for (const module of modules) {
+          // Check if assignment already exists
+          const existingAssignment = existingAssignments.find(a => 
+            a.moduleId === module.id && a.trainerId === trainer.id
+          );
+          
+          if (existingAssignment) continue; // Skip if already exists
+          
           // Check if trainer specialties match module
           const canTeach = trainer.specialties?.some(specialty => 
             module.name.toLowerCase().includes(specialty.toLowerCase()) ||
@@ -459,6 +467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               assignmentsCreated++;
             } catch (error) {
               // Assignment might already exist, continue
+              console.log(`Assignment already exists for trainer ${trainer.id} and module ${module.id}`);
             }
           }
         }
@@ -469,6 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: `${assignmentsCreated} affectations créées automatiquement` 
       });
     } catch (error) {
+      console.error('Auto-assign error:', error);
       res.status(500).json({ message: "Failed to auto-assign trainers to modules" });
     }
   });

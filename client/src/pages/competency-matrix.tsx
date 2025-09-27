@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Users, BookOpen, CircleCheck as CheckCircle, Circle as XCircle, TriangleAlert as AlertTriangle, Download, RefreshCw } from "lucide-react";
+import { Users, BookOpen, CheckCircle, XCircle, AlertTriangle, Download, RefreshCw, BarChart3 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { exportToPDF, exportToExcel } from "@/lib/exports";
@@ -73,6 +73,7 @@ export default function CompetencyMatrix() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/module-trainer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
       toast({
         title: "Succès",
         description: "Affectation mise à jour",
@@ -334,7 +335,7 @@ export default function CompetencyMatrix() {
                 <div className="overflow-x-auto">
                   <div className="min-w-[800px]">
                     {/* Header */}
-                    <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: 'minmax(200px, 250px) repeat(auto-fit, minmax(120px, 1fr))' }}>
+                    <div className="grid gap-1 mb-2" style={{ gridTemplateColumns: `minmax(200px, 250px) repeat(${modules?.length || 0}, minmax(120px, 1fr))` }}>
                       <div className="font-semibold text-sm p-3 bg-muted rounded">Formateur / Module</div>
                       {modules?.map((module, index) => (
                         <div key={module.id} className="font-semibold text-xs p-2 bg-muted rounded text-center">
@@ -353,7 +354,7 @@ export default function CompetencyMatrix() {
                       const stats = getTrainerModuleStats(trainer.id);
                       
                       return (
-                        <div key={trainer.id} className="grid gap-1 mb-1" style={{ gridTemplateColumns: 'minmax(200px, 250px) repeat(auto-fit, minmax(120px, 1fr))' }}>
+                        <div key={trainer.id} className="grid gap-1 mb-1" style={{ gridTemplateColumns: `minmax(200px, 250px) repeat(${modules?.length || 0}, minmax(120px, 1fr))` }}>
                           <div className="p-3 border rounded font-medium text-sm bg-blue-50">
                             <div className="truncate font-semibold" data-testid={`trainer-name-${trainerIndex}`}>
                               {trainer.name}
